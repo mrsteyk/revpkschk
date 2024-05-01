@@ -1,0 +1,11 @@
+build/
+*.exe
+*.obj
+*.o
+*.ilk
+*.pdb
+
+# testing
+*.ignore
+*.raddbgi
+*.vpk

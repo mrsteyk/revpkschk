@@ -1,0 +1,60 @@
+version(2);
+
+project_name = "ReVPK Single Chunk packer";
+
+patterns =
+{
+    "*.c",
+    "*.cpp",
+    "*.h",
+    "*.inc",
+    "*.bat",
+    "*.sh",
+    "*.4coder",
+    "*.txt",
+    "*.md",
+    "*.asm",
+    "*.masm",
+};
+
+blacklist_patterns =
+{
+    ".*",
+};
+
+paths = {
+    { .path = ".",   .recursive = false, .relative = true },
+    { .path = "src", .recursive = true,  .relative = true },
+};
+
+load_paths =
+{
+    .win = paths,
+};
+
+commands =
+{
+    .build =
+    {
+        .win = "build",
+        .linux = "",
+        .out = "*compilation*",
+        .footer_panel = true,
+        .save_dirty_files = true,
+        .cursor_at_end = false,
+    },
+    
+    .run = {
+        .win = "pushd build && echo Windows run command not implemented for this 4coder project. && popd",
+        .linux = "echo Linux run command not implemented for this 4coder project.",
+        .out = "*compilation*",
+        .footer_panel = true,
+        .save_dirty_files = true,
+        .cursor_at_end = false,
+    },
+};
+
+fkey_command = {
+    .F1 = "build",
+    .F3 = "run",
+};
