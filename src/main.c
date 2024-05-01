@@ -63,74 +63,6 @@ struct VPKFile {
 };
 
 static b32
-vpkfile_create(Arena* arena, VPKFile* f, S16 file_path) {
-    HANDLE fh = CreateFileW(file_path.ptr, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-    if (fh == INVALID_HANDLE_VALUE) {
-        return(1);
-    }
-    f->fh = fh;
-    
-    LARGE_INTEGER size;
-    if (!GetFileSizeEx(fh, &size)) {
-        return(2);
-    }
-    f->file_size = size.QuadPart;
-    
-    S16 full_filename = S16_strrchr(file_path, L'\\');
-    if (full_filename.ptr == 0) {
-        f->path = S8_lit(" ");
-        
-        full_filename = file_path;
-    } else {
-        // get the inverse string.
-        S16 dir16;
-        dir16.ptr = file_path.ptr;
-        dir16.size = file_path.size - full_filename.size;
-        
-        full_filename.ptr++;
-        full_filename.size--;
-        
-        S8 dir = str8_from_16(arena, dir16);
-        for (u64 i = 0; i < dir.size; i++) {
-            if (dir.ptr[i] == '\\')
-                dir.ptr[i] = '/';
-        }
-        f->path = dir;
-    }
-    
-    S16 ext = S16_strrchr(full_filename, L'.');
-    // TODO(mrsteyk): .gitignore and alikes
-    if (ext.size == full_filename.size) __debugbreak();
-    // TODO(mrsteyk): == 1???
-    //if (ext.ptr == 0 || ext.size == 1) {
-    if (ext.ptr == 0) {
-        f->extension = S8_lit(" ");
-        
-        S16 filename16;
-        filename16.ptr = full_filename.ptr;
-        filename16.size = full_filename.size - ext.size;
-        S8 filename = str8_from_16(arena, filename16);
-        f->filename = filename;
-    } else {
-        S16 ext16 = ext;
-        ext16.ptr++;
-        ext16.size--;
-        S8 ext8 = str8_from_16(arena, ext16);
-        f->extension = ext8;
-        
-        S16 filename16;
-        filename16.ptr = full_filename.ptr;
-        filename16.size = full_filename.size - ext.size;
-        S8 filename = str8_from_16(arena, filename16);
-        f->filename = filename;
-    }
-    
-    f->written = 0;
-    
-    return(0);
-}
-
-static b32
 vpkfile_create2(Arena* arena, VPKFile* f, S16 dir_path, S16 full_filename, LARGE_INTEGER size, u64 skip_size) {
     HANDLE fh = INVALID_HANDLE_VALUE;
     {
@@ -394,21 +326,8 @@ main(int argc, char** argv) {
     header->magic = VPKHEADER_MAGIC;
     header->version = VPKHEADER_VERSION;
     
-    /*
-    S16 path = S16_lit(L"src\\main.c");
-    VPKFile f = {0};
-    vpkfile_create(temp, &f, path);
-    {
-        printf("Path %llu: %.*s\n", f.path.size, (int)f.path.size, f.path.ptr);
-        printf("Filename %llu: %.*s\n", f.filename.size, (int)f.filename.size, f.filename.ptr);
-        printf("Ext %llu: %.*s\n", f.extension.size, (int)f.extension.size, f.extension.ptr);
-        printf("File size: %llu\n", f.file_size);
-    }
-*/
-    
     Measurement msr_w[3];
     
-    //S16 init_dir = S16_lit(L"src");
     S16 init_dir = S16_from_c(args[1]);
     perf_measure(&msr_w[0].start);
     VPKFile* h = os_walk_vpk(temp, init_dir, 0, init_dir.size);
@@ -425,10 +344,7 @@ main(int argc, char** argv) {
     }
     
     perf_measure(&msr_w[1].start);
-    //u64 files_written;
     while(1) {
-        //files_written = 0;
-        
         S8 curr_ext = {0};
         
         for (VPKFile* c = h; c; c = c->next) {
@@ -444,8 +360,6 @@ main(int argc, char** argv) {
         vpkfile_write_string(arena_dir, curr_ext);
         
         while(1) {
-            //files_written = 0;
-            
             S8 curr_path = {0};
             
             for (VPKFile* c = h; c; c = c->next) {
@@ -471,7 +385,6 @@ main(int argc, char** argv) {
                 
                 vpkfile_write_string(arena_dir, c->filename);
                 vpkfile_write_file_entries(temp, arena_dir, arena_data, c);
-                //files_written++;
             }
             
             // exit out of current path
@@ -480,43 +393,25 @@ main(int argc, char** argv) {
         
         vpkfile_write_string(arena_dir, S8_lit(""));
     }
-    
-    /*
-    vpkfile_write_string(arena_dir, f.extension);
-    vpkfile_write_string(arena_dir, f.path);
-    vpkfile_write_string(arena_dir, f.filename);
-    vpkfile_write_file_entries(temp, arena_dir, arena_data, &f);
-    */
-    
     // NOTE(mrsteyk): end
-    //vpkfile_write_string(arena_dir, S8_lit(""));
-    //vpkfile_write_string(arena_dir, S8_lit(""));
     vpkfile_write_string(arena_dir, S8_lit(""));
     
     u64 dir_size = arena_dir->pos - ArenaStartPos(arena_dir);
     header->directory_size = dir_size - sizeof(VPKHeader);
     
     // NOTE(mrsteyk): fixing the offset now
-    {
-        /*
-        u64 num_blocks = (f.file_size + VPK_MAX_SIZE_PER_ENTRY - 1) / VPK_MAX_SIZE_PER_ENTRY;
-        for (u64 i = 0; i < num_blocks; i++) {
-            f.entry_start[i].offset += dir_size;
+    for (VPKFile* c = h; c; c = c->next) {
+        if (!c->written) {
+            fprintf(stderr, "File %.*s/%.*s.%.*s failed to write!\n", (int)c->path.size, c->path.ptr, (int)c->filename.size, c->filename.ptr, (int)c->extension.size, c->extension.ptr);
+            __debugbreak();
         }
-*/
         
-        for (VPKFile* c = h; c; c = c->next) {
-            if (!c->written) {
-                fprintf(stderr, "File %.*s/%.*s.%.*s failed to write!\n", (int)c->path.size, c->path.ptr, (int)c->filename.size, c->filename.ptr, (int)c->extension.size, c->extension.ptr);
-                __debugbreak();
-            }
-            
-            u64 num_blocks = (c->file_size + VPK_MAX_SIZE_PER_ENTRY - 1) / VPK_MAX_SIZE_PER_ENTRY;
-            for (u64 i = 0; i < num_blocks; i++) {
-                c->entry_start[i].offset += dir_size;
-            }
+        u64 num_blocks = (c->file_size + VPK_MAX_SIZE_PER_ENTRY - 1) / VPK_MAX_SIZE_PER_ENTRY;
+        for (u64 i = 0; i < num_blocks; i++) {
+            c->entry_start[i].offset += dir_size;
         }
     }
+    
     perf_measure(&msr_w[1].end);
     
     {
@@ -542,13 +437,13 @@ main(int argc, char** argv) {
                 output_name.size--;
             }
         }
-        u16* buf = (u16*)arena_push_size(temp, (output_name.size * 2) + sizeof(L"_dir.vpk"));
+        u16* buf = (u16*)arena_push_size(temp, (output_name.size * 2) + sizeof(L"_dir.vpk") + 2);
         memcpy(buf, output_name.ptr, output_name.size * 2);
         memcpy(buf + output_name.size, L"_dir.vpk", sizeof(L"_dir.vpk"));
         output_name.ptr = buf;
         output_name.size += sizeof(L"_dir.vpk") / 2;
+        output_name.ptr[output_name.size] = 0;
     }
-    //HANDLE fh = CreateFileW(L"schk_test_dir.vpk", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
     HANDLE fh = INVALID_HANDLE_VALUE;
     for (int i = 0; i < 2; i++) {
         fh = CreateFileW(output_name.ptr, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
