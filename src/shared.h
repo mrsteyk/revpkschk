@@ -2,6 +2,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
+#include <shellapi.h>
 #else
 #define __debugbreak() __builtin_trap()
 typedef unsigned long long LARGE_INTEGER;

@@ -363,14 +363,27 @@ os_walk_vpk(Arena* arena, S16 dir, VPKFile* h, u32 initial_dir_size) {
 //~ mrsteyk: @main
 
 int
-main() {
+main(int argc, char** argv) {
 #if defined(_WIN32)
     LARGE_INTEGER freq;
     QueryPerformanceFrequency(&freq);
     SetConsoleOutputCP(65001);
+    
+    int args_count = 0;
+    wchar_t** args = CommandLineToArgvW(GetCommandLineW(), &args_count);
 #else
     LARGE_INTEGER freq = {0};
+    
+    int args_count = argc;
+    char** args = argv;
 #endif
+    
+    if (args_count < 2) {
+        wprintf(L"Invalid usage!\nUsage: %s FOLDER [OPTIONAL_OUTPUT_FILENAME]\n", args[0]);
+        getchar();
+        return(1);
+    }
+    
     Arena* temp = arena_create(ARENA_DEFAULT_COMMIT, GB(64), ARENA_DEFAULT_ALIGN);
     
     // NOTE(mrsteyk): align must be one to not fuck up the memory layout...
@@ -395,7 +408,8 @@ main() {
     
     Measurement msr_w[3];
     
-    S16 init_dir = S16_lit(L"src");
+    //S16 init_dir = S16_lit(L"src");
+    S16 init_dir = S16_from_c(args[1]);
     perf_measure(&msr_w[0].start);
     VPKFile* h = os_walk_vpk(temp, init_dir, 0, init_dir.size);
     perf_measure(&msr_w[0].end);
@@ -492,8 +506,10 @@ main() {
 */
         
         for (VPKFile* c = h; c; c = c->next) {
-            if (!c->written)
+            if (!c->written) {
+                fprintf(stderr, "File %.*s/%.*s.%.*s failed to write!\n", (int)c->path.size, c->path.ptr, (int)c->filename.size, c->filename.ptr, (int)c->extension.size, c->extension.ptr);
                 __debugbreak();
+            }
             
             u64 num_blocks = (c->file_size + VPK_MAX_SIZE_PER_ENTRY - 1) / VPK_MAX_SIZE_PER_ENTRY;
             for (u64 i = 0; i < num_blocks; i++) {
@@ -513,7 +529,36 @@ main() {
     
     perf_measure(&msr_w[2].start);
 #if defined(_WIN32)
-    HANDLE fh = CreateFileW(L"schk_test_dir.vpk", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    S16 output_name = {0};
+    if (args_count > 2) {
+        output_name = S16_from_c(args[2]);
+    } else {
+        output_name = S16_strrchr(init_dir, L'\\');
+        if (output_name.ptr == 0 || output_name.size == 0) {
+            output_name = init_dir;
+        } else {
+            while (output_name.ptr[0] == L'\\') {
+                output_name.ptr++;
+                output_name.size--;
+            }
+        }
+        u16* buf = (u16*)arena_push_size(temp, (output_name.size * 2) + sizeof(L"_dir.vpk"));
+        memcpy(buf, output_name.ptr, output_name.size * 2);
+        memcpy(buf + output_name.size, L"_dir.vpk", sizeof(L"_dir.vpk"));
+        output_name.ptr = buf;
+        output_name.size += sizeof(L"_dir.vpk") / 2;
+    }
+    //HANDLE fh = CreateFileW(L"schk_test_dir.vpk", GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+    HANDLE fh = INVALID_HANDLE_VALUE;
+    for (int i = 0; i < 2; i++) {
+        fh = CreateFileW(output_name.ptr, GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+        if (fh == INVALID_HANDLE_VALUE) {
+            output_name = S16_lit(L"singlechunk_dir.vpk");
+        } else {
+            break;
+        }
+    }
+    wprintf(L"Writing to %s\n", output_name.ptr);
     WriteFile(fh, (u8*)arena_dir + ArenaStartPos(arena_dir), dir_size, 0, 0);
     WriteFile(fh, (u8*)arena_data + ArenaStartPos(arena_data), arena_data->pos - ArenaStartPos(arena_data), 0, 0);
 #else
