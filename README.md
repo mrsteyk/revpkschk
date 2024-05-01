@@ -1,14 +1,14 @@
 # ReVPK Single Chunk
 
 Tested on windows only, idk, I already put few `#if`'s in there, DIY. Titanfall runs on windows only.
-Not battle tested yet, use at your own risk.
+Not battle tested yet, use at your own risk. Compression is WIP.
 
 ## Usage
 
-Call with folder path and output file name. (TODO)
+Call with folder path and output file name.
 
 ```batch
-a.exe ROOT_PATH OUTPUT_FILE
+a.exe ROOT_PATH [OUTPUT_FILE]
 ```
 
 ## Fuck Everything, We're Doing One VPK File
