@@ -224,9 +224,6 @@ os_walk_vpk(Arena* arena, S16 dir, VPKFile* h, u32 initial_dir_size) {
     {
         if (ffd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
         {
-            //_tprintf(TEXT("  %s   <DIR>\n"), ffd.cFileName);
-            // With current design I couldn't even pop the string out...
-            // But it's only couple bytes so who cares...
             S16 fname = S16_from_c(ffd.cFileName);
             if (fname.size == 1 && fname.ptr[0] == L'.')
                 continue;
@@ -245,26 +242,9 @@ os_walk_vpk(Arena* arena, S16 dir, VPKFile* h, u32 initial_dir_size) {
         }
         else
         {
-            //filesize.LowPart = ffd.nFileSizeLow;
-            //filesize.HighPart = ffd.nFileSizeHigh;
-            //_tprintf(TEXT("  %s   %ld bytes\n"), ffd.cFileName, filesize.QuadPart);
-            
             LARGE_INTEGER size;
             size.LowPart = ffd.nFileSizeLow;
             size.HighPart = ffd.nFileSizeHigh;
-            //VPKFile f;
-            
-            /*
-            //S16 path16 = S16_from_c(ffd.cFileName);
-            u64 cfn_l = wcslen(ffd.cFileName);
-            u64 path16_size = dir.size + cfn_l + 1;
-            S16 path16;
-            path16.ptr = (u16*)arena_push_size(arena, path16_size * 2);
-            path16.size = path16_size;
-            memcpy(path16.ptr, dir.ptr, dir.size * 2);
-            path16.ptr[dir.size] = L'\\';
-            memcpy(path16.ptr + dir.size + 1, ffd.cFileName, cfn_l * 2);
-            */
             
             u64 save = arena->pos;
             VPKFile* f = (VPKFile*)arena_push_size(arena, sizeof(VPKFile));
