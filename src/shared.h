@@ -617,3 +617,30 @@ S16_from_c(const wchar_t* c) {
     ret.size = size;
     return(ret);
 }
+
+//- mrsteyk: by r3muxd
+
+static int
+str8_tolower_cmp(S8 a, S8 b) {
+    if (a.size != b.size) {
+        return a.size - b.size;
+    }
+    
+    for (u64 i = 0; i < a.size; i++) {
+        u8 char_a = a.ptr[i];
+        u8 char_b = b.ptr[i];
+        
+        if (char_a >= 'A' && char_a <= 'Z') {
+            char_a += 32;
+        }
+        if (char_b >= 'A' && char_b <= 'Z') {
+            char_b += 32;
+        }
+        
+        if (char_a != char_b) {
+            return char_a - char_b;
+        }
+    }
+    
+    return(0);
+}

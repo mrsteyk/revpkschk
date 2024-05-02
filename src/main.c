@@ -1,5 +1,7 @@
 #include "shared.h"
 
+#include "third-party/lzham_alpha/include/lzham.h"
+
 //~ mrsteyk: @vpk
 
 #define VPKHEADER_MAGIC 0x55AA1234
@@ -151,6 +153,18 @@ vpkfile_write_string(Arena* arena, S8 str) {
     ptr[str.size] = 0;
 }
 
+
+#define tflzham_dict_size 20
+static const lzham_compress_params tflzham_compress_params = {
+    .m_struct_size = sizeof(lzham_compress_params),
+    .m_dict_size_log2 = tflzham_dict_size,
+    .m_compress_flags = LZHAM_COMP_FLAG_DETERMINISTIC_PARSING,
+};
+static void
+vpkfile_write_init() {
+    lzham_compress_init(&tflzham_compress_params);
+}
+
 static void
 vpkfile_write_file_entries(Arena* tmp, Arena* arena_dir, Arena* arena_data, VPKFile* f) {
     u64 tmp_pos = tmp->pos;
@@ -159,9 +173,8 @@ vpkfile_write_file_entries(Arena* tmp, Arena* arena_dir, Arena* arena_data, VPKF
     u8* file_data = arena_push_size(tmp, f->file_size);
     ReadFile(f->fh, file_data, f->file_size, 0, 0);
     
-    // TODO(mrsteyk): CRC
     VPKEntryBlock* block = (VPKEntryBlock*)arena_push_size(arena_dir, sizeof(*block));
-    block->crc = 0;
+    block->crc = lzham_z_crc32(LZHAM_Z_CRC32_INIT, file_data, f->file_size);
     block->size = 0;
     block->fileidx = 0x7fff;
     
@@ -181,12 +194,38 @@ vpkfile_write_file_entries(Arena* tmp, Arena* arena_dir, Arena* arena_data, VPKF
             chunk_size = file_size_rem;
         }
         
-        // TODO(mrsteyk): LZHAM compress
-        e->compressed_size = e->decompressed_size = chunk_size;
+        // NOTE(mrsteyk): initially written by r3muxd
+        b32 write_decomp = 1;
         u8* data_ptr = (u8*)arena_push_size(arena_data, chunk_size);
-        memcpy(data_ptr, file_data, chunk_size);
         
-        e->offset = arena_data->pos - chunk_size - ArenaStartPos(arena_data);
+        if (str8_tolower_cmp(f->extension, S8_lit("wav")) != 0 && str8_tolower_cmp(f->extension, S8_lit("xma")) != 0) {
+            lzham_uint32 comp_adler32 = LZHAM_Z_ADLER32_INIT;
+            size_t comp_size = chunk_size;
+            
+            lzham_compress_status_t comp_status = lzham_compress_memory(&tflzham_compress_params, data_ptr, &comp_size, file_data, chunk_size, &comp_adler32);
+            if (comp_status == LZHAM_COMP_STATUS_OUTPUT_BUF_TOO_SMALL) {
+                fprintf(stderr, "LZHAM compression failed with status %i (compressing the file is worse than leaving it uncompressed). Writing chunk uncompressed.\n", comp_status);
+            } else if (comp_status != LZHAM_COMP_STATUS_SUCCESS) {
+                fprintf(stderr, "LZHAM compression failed with status %i.\n", comp_status);
+                __debugbreak();
+            } else {
+                write_decomp = 0;
+                
+                arena_put_back(arena_data, chunk_size - comp_size);
+                e->compressed_size = comp_size;
+                e->decompressed_size = chunk_size;
+				if (e->decompressed_size == 0 || e->compressed_size == 0)
+					__debugbreak();
+				fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed size %llu, compressed size %llu, putting back %llu (saved %f%%).\n", f->path.ptr, f->filename.ptr, f->extension.ptr, i+1, num_blocks, e->compressed_size, e->decompressed_size, chunk_size - comp_size, (((float)e->compressed_size) / (float)(e->decompressed_size))*100.f);
+            }
+        }
+        
+        if (write_decomp) {
+            e->compressed_size = e->decompressed_size = chunk_size;
+            memcpy(data_ptr, file_data, chunk_size);
+        }
+        
+        e->offset = arena_data->pos - e->compressed_size - ArenaStartPos(arena_data);
         file_data += chunk_size;
         file_size_rem -= chunk_size;
         
@@ -323,6 +362,7 @@ main(int argc, char** argv) {
         printf("-\n");
     }
     
+    vpkfile_write_init();
     perf_measure(&msr_w[1].start);
     while(1) {
         S8 curr_ext = {0};

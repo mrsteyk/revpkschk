@@ -9,3 +9,11 @@ build/
 *.ignore
 *.raddbgi
 *.vpk
+
+# junk files
+.vs/
+*.vcproj
+*.vcxproj
+*.cbp
+*.depend
+**/UpgradeLog.htm
