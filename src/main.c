@@ -9,7 +9,7 @@
 
 #define VPK_MAX_SIZE_PER_ENTRY 0x100000
 
-#define VPK_ENTRY_TERMINATOR 0xFFFF 
+#define VPK_ENTRY_TERMINATOR 0xFFFF
 
 //- mrsteyk: structs
 #pragma pack(push, 1)
@@ -214,9 +214,11 @@ vpkfile_write_file_entries(Arena* tmp, Arena* arena_dir, Arena* arena_data, VPKF
                 arena_put_back(arena_data, chunk_size - comp_size);
                 e->compressed_size = comp_size;
                 e->decompressed_size = chunk_size;
-				if (e->decompressed_size == 0 || e->compressed_size == 0)
-					__debugbreak();
-				fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed size %llu, compressed size %llu, putting back %llu (saved %f%%).\n", f->path.ptr, f->filename.ptr, f->extension.ptr, i+1, num_blocks, e->compressed_size, e->decompressed_size, chunk_size - comp_size, (((float)e->compressed_size) / (float)(e->decompressed_size))*100.f);
+                if (e->decompressed_size == 0 || e->compressed_size == 0)
+                    __debugbreak();
+                fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed size %llu, compressed size %llu, putting back %llu (saved %f%%).\n", f->path.ptr,
+                        f->filename.ptr, f->extension.ptr, i+1, num_blocks, e->compressed_size, e->decompressed_size, chunk_size - comp_size,
+                        (((float)e->compressed_size) / (float)(e->decompressed_size))*100.f);
             }
         }
         
