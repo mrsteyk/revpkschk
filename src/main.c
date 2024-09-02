@@ -2,6 +2,10 @@
 
 #include "third-party/lzham_alpha/include/lzham.h"
 
+// TODO(mrsteyk): ifdef
+//#include "third-party/zstd-1.5.6/zstd.c"
+#include "third-party/zstd-1.5.6/zstd.h"
+
 //~ mrsteyk: @vpk
 
 #define VPKHEADER_MAGIC 0x55AA1234
@@ -216,9 +220,24 @@ vpkfile_write_file_entries(Arena* tmp, Arena* arena_dir, Arena* arena_data, VPKF
                 e->decompressed_size = chunk_size;
                 if (e->decompressed_size == 0 || e->compressed_size == 0)
                     __debugbreak();
-                fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed size %llu, compressed size %llu, putting back %llu (saved %f%%).\n", f->path.ptr,
-                        f->filename.ptr, f->extension.ptr, i+1, num_blocks, e->compressed_size, e->decompressed_size, chunk_size - comp_size,
-                        (((float)e->compressed_size) / (float)(e->decompressed_size))*100.f);
+                
+                // TODO(mrsteyk): BAD WORK IN PROGRESS!!!
+                u64 zstd_compressed = 0;
+                {
+                    u64 tmp_pos_c = tmp->pos;
+                    u64 csize = ZSTD_compressBound(chunk_size);
+                    u8* zbuf = arena_push_size(tmp, csize);
+                    
+                    // TODO(mrsteyk): reuse compression context
+                    // NOTE(mrsteyk): default is 3, let's try 7, let's try 22
+                    zstd_compressed = ZSTD_compress(zbuf, csize, file_data, chunk_size, 22);
+                    
+                    arena_pop_to(tmp, tmp_pos_c);
+                }
+                
+                fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed size %llu, compressed size %llu (%llu), putting back %llu (ratio %f%% (%f%%)).\n", f->path.ptr,
+                        f->filename.ptr, f->extension.ptr, i+1, num_blocks, e->decompressed_size, e->compressed_size, zstd_compressed, chunk_size - comp_size,
+                        (((float)e->compressed_size) / (float)(e->decompressed_size))*100.f, (((float)zstd_compressed) / (float)(e->decompressed_size))*100.f);
             }
         }
         

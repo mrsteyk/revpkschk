@@ -24,5 +24,5 @@ if "%debug%" == "1" set copts=-O0
 
 echo Building main
 pushd build
-clang -fuse-ld=lld -g %copts% ..\src\main.c lzham.o lzham_polar.o lzham_huffman.o -o deltavpk.exe -lshell32
+clang -fuse-ld=lld -g %copts% ..\src\main.c ..\src\third-party\zstd-1.5.6\zstd.c lzham.o lzham_polar.o lzham_huffman.o -o deltavpk.exe -lshell32
 popd
