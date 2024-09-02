@@ -116,7 +116,7 @@ vpkfile_create2(Arena* arena, VPKFile* f, S16 dir_path, S16 full_filename, LARGE
     
     S16 ext = S16_strrchr(full_filename, L'.');
     // TODO(mrsteyk): .gitignore and alikes
-    if (ext.size == full_filename.size) __debugbreak();
+    if (ext.size == full_filename.size) return(-1);
     // TODO(mrsteyk): == 1???
     //if (ext.ptr == 0 || ext.size == 1) {
     if (ext.ptr == 0) {
