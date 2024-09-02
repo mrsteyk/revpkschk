@@ -164,9 +164,13 @@ static const lzham_compress_params tflzham_compress_params = {
     .m_dict_size_log2 = tflzham_dict_size,
     .m_compress_flags = LZHAM_COMP_FLAG_DETERMINISTIC_PARSING,
 };
+
+ZSTD_CCtx* zctx;
+
 static void
 vpkfile_write_init() {
-    lzham_compress_init(&tflzham_compress_params);
+    //lzham_compress_init(&tflzham_compress_params);
+    zctx = ZSTD_createCCtx();
 }
 
 static void
@@ -228,9 +232,8 @@ vpkfile_write_file_entries(Arena* tmp, Arena* arena_dir, Arena* arena_data, VPKF
                     u64 csize = ZSTD_compressBound(chunk_size);
                     u8* zbuf = arena_push_size(tmp, csize);
                     
-                    // TODO(mrsteyk): reuse compression context
                     // NOTE(mrsteyk): default is 3, let's try 7, let's try 22
-                    zstd_compressed = ZSTD_compress(zbuf, csize, file_data, chunk_size, 22);
+                    zstd_compressed = ZSTD_compressCCtx(zctx, zbuf, csize, file_data, chunk_size, 22);
                     
                     arena_pop_to(tmp, tmp_pos_c);
                 }
