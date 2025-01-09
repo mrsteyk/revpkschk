@@ -6,6 +6,58 @@
 //#include "third-party/zstd-1.5.6/zstd.c"
 #include "third-party/zstd-1.5.6/zstd.h"
 
+//~ mrsteyk: @emgt Epic MegaGames Tools
+#define EMGT_LIB L"emgt.dll"
+enum EMGT_Compressors
+{
+    EMGT_COMPRESSOR_K = 8,
+    EMGT_COMPRESSOR_M = 9,
+    EMGT_COMPRESSOR_S = 11,
+    EMGT_COMPRESSOR_H = 12,
+    EMGT_COMPRESSOR_L = 13,
+};
+
+typedef int WINAPI EMGT_LZ_CompressFunc_t(int codec, u8 *src_buf, size_t src_len, u8 *dst_buf, int level,void *opts, size_t offs, size_t unused, void *scratch, size_t scratch_size);
+typedef int WINAPI EMGT_LZ_DecompressFunc_t(u8 *src_buf, int src_len, u8 *dst, size_t dst_size, int fuzz, int crc, int verbose, u8 *dst_base, size_t e, void *cb, void *cb_ctx, void *scratch, size_t scratch_size, int threadPhase);
+EMGT_LZ_CompressFunc_t* EMGT_LZCompress = 0;
+EMGT_LZ_DecompressFunc_t* EMGT_LZDecompress = 0;
+
+void
+emgt_init()
+{
+    HANDLE mod = LoadLibraryW(EMGT_LIB);
+    {
+        char proc[] = "XXXXXLZ_Compress";
+        proc[0] = 'O';
+        proc[1] = 'o';
+        proc[2] = 'd';
+        proc[3] = 'l';
+        proc[4] = 'e';
+        EMGT_LZCompress = (void*)GetProcAddress(mod, proc);
+    }
+    {
+        char proc[] = "XXXXXLZ_Deompress";
+        proc[0] = 'O';
+        proc[1] = 'o';
+        proc[2] = 'd';
+        proc[3] = 'l';
+        proc[4] = 'e';
+        EMGT_LZDecompress = (void*)GetProcAddress(mod, proc);
+    }
+}
+
+//~ mrsteyk: brotli
+
+typedef int BrotliEncoderCompress_t(int quality, int lgwin, int mode, size_t input_size, const u8* input_buffer, size_t* encoded_size, u8* encoded_buffer);
+BrotliEncoderCompress_t* BrotliCompress = 0;
+
+void
+brotli_init()
+{
+    HANDLE mod = LoadLibraryW(L"brotlienc.dll");
+    BrotliCompress = (void*)GetProcAddress(mod, "BrotliEncoderCompress");
+}
+
 //~ mrsteyk: @vpk
 
 #define VPKHEADER_MAGIC 0x55AA1234
@@ -207,9 +259,10 @@ vpkfile_write_file_entries(Arena* tmp, Arena* arena_dir, Arena* arena_data, VPKF
         u8* data_ptr = (u8*)arena_push_size(arena_data, chunk_size);
         
         if (str8_tolower_cmp(f->extension, S8_lit("wav")) != 0 && str8_tolower_cmp(f->extension, S8_lit("xma")) != 0) {
+#if 0
+#if 1
             lzham_uint32 comp_adler32 = LZHAM_Z_ADLER32_INIT;
             size_t comp_size = chunk_size;
-            
             lzham_compress_status_t comp_status = lzham_compress_memory(&tflzham_compress_params, data_ptr, &comp_size, file_data, chunk_size, &comp_adler32);
             if (comp_status == LZHAM_COMP_STATUS_OUTPUT_BUF_TOO_SMALL) {
                 fprintf(stderr, "LZHAM compression failed with status %i (compressing the file is worse than leaving it uncompressed). Writing chunk uncompressed.\n", comp_status);
@@ -225,6 +278,7 @@ vpkfile_write_file_entries(Arena* tmp, Arena* arena_dir, Arena* arena_data, VPKF
                 if (e->decompressed_size == 0 || e->compressed_size == 0)
                     __debugbreak();
                 
+#if 0
                 // TODO(mrsteyk): BAD WORK IN PROGRESS!!!
                 u64 zstd_compressed = 0;
                 {
@@ -241,7 +295,79 @@ vpkfile_write_file_entries(Arena* tmp, Arena* arena_dir, Arena* arena_data, VPKF
                 fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed size %llu, compressed size %llu (%llu), putting back %llu (ratio %f%% (%f%%)).\n", f->path.ptr,
                         f->filename.ptr, f->extension.ptr, i+1, num_blocks, e->decompressed_size, e->compressed_size, zstd_compressed, chunk_size - comp_size,
                         (((float)e->compressed_size) / (float)(e->decompressed_size))*100.f, (((float)zstd_compressed) / (float)(e->decompressed_size))*100.f);
+#else
+                fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed size %llu, compressed size %llu, putting back %llu (ratio %f%%).\n", f->path.ptr,
+                        f->filename.ptr, f->extension.ptr, i+1, num_blocks, e->decompressed_size, e->compressed_size, chunk_size - comp_size,
+                        (((float)e->compressed_size) / (float)(e->decompressed_size))*100.f);
+#endif
             }
+#else
+            //u64 csize = ZSTD_compressBound(chunk_size);
+            u64 zstd_compressed = ZSTD_compressCCtx(zctx, data_ptr, chunk_size, file_data, chunk_size, 9);
+            if (!ZSTD_isError(zstd_compressed))
+            {
+                arena_put_back(arena_data, chunk_size - zstd_compressed);
+                
+                write_decomp = 0;
+                e->compressed_size = zstd_compressed;
+                e->decompressed_size = chunk_size;
+                
+                fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed %llu, compressed %llu, ratio %f%%.\n",
+                        f->path.ptr, f->filename.ptr, f->extension.ptr,
+                        i+1, num_blocks,
+                        e->decompressed_size, e->compressed_size,
+                        (zstd_compressed/(float)e->decompressed_size)*100.f);
+            }
+            else
+            {
+                fprintf(stderr, "ZSTD error: %s\n", ZSTD_getErrorName(zstd_compressed));
+            }
+#endif
+#else
+            //- 1 - EGMT, 0 - brotli
+#if 0
+            //- mrsteyk: Epic MegaGames Tools path
+            int ret = EMGT_LZCompress(EMGT_COMPRESSOR_L, file_data, chunk_size, data_ptr, 9, 0, 0, 0, 0, 0);
+            if (ret > 0)
+            {
+                u64 compressed = (u64)ret;
+                arena_put_back(arena_data, chunk_size - compressed);
+                
+                write_decomp = 0;
+                e->compressed_size = compressed;
+                e->decompressed_size = chunk_size;
+                
+                
+                fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed %llu, compressed %llu, ratio %f%%.\n",
+                        f->path.ptr, f->filename.ptr, f->extension.ptr,
+                        i+1, num_blocks,
+                        e->decompressed_size, e->compressed_size,
+                        (compressed/(float)e->decompressed_size)*100.f);
+            }
+            else
+            {
+                fprintf(stderr, "EMGT Error %X\n", (uint32_t)ret);
+            }
+#else
+            //- mrsteyk: brotli path
+            u64 compressed = chunk_size;
+            int ret = BrotliCompress(11, 22, 0, chunk_size, file_data, &compressed, data_ptr);
+            if (ret)
+            {
+                write_decomp = 0;
+                e->compressed_size = compressed;
+                e->decompressed_size = chunk_size;
+                
+                arena_put_back(arena_data, chunk_size - compressed);
+                
+                fprintf(stderr, "Compressing %s/%s.%s (block %llu of %llu): uncompressed %llu, compressed %llu, ratio %f%%.\n",
+                        f->path.ptr, f->filename.ptr, f->extension.ptr,
+                        i+1, num_blocks,
+                        e->decompressed_size, e->compressed_size,
+                        (compressed/(float)e->decompressed_size)*100.f);
+            }
+#endif
+#endif
         }
         
         if (write_decomp) {
@@ -358,6 +484,23 @@ main(int argc, char** argv) {
         getchar();
         return(1);
     }
+    
+#if 0
+    emgt_init();
+    if (!EMGT_LZCompress || EMGT_LZDecompress)
+    {
+        wprintf(L"Failed to initialise Epic MegaGames Tools path!\n");
+        return(1);
+    }
+#endif
+#if 1
+    brotli_init();
+    if (!BrotliCompress)
+    {
+        wprintf(L"Failed to initialise brotli encoder!\n");
+        return(1);
+    }
+#endif
     
     Arena* temp = arena_create(ARENA_DEFAULT_COMMIT, GB(64), ARENA_DEFAULT_ALIGN);
     
